@@ -1,42 +1,57 @@
 pipeline {
     agent any
-
+    
     environment {
-        // Reference the secret ID configured in Jenkins
-        KUBECONFIG_PATH = credentials('minikube-config')
-        // Define the deployment name as a variable to prevent mismatches
-        DEPLOYMENT_NAME = 'my-app'
+        IMAGE_NAME = "testingacountwork/my-app"
+        TAG = "${BUILD_NUMBER}"
+        IMAGE_WITH_TAG = "${IMAGE_NAME}:${TAG}"
+        // Ensure this ID matches your Jenkins Credentials
+        DOCKER_HUB_CREDS = 'dockerhub-credentials-id' 
     }
 
     stages {
-        stage('Checkout') {
+        stage('Verify Files') {
+    steps {
+        git branch: 'main', url: 'https://github.com/Repo-Testing-Account/dep-test.git'
+    }
+}
+        stage('Build & Push') {
             steps {
-                git branch: 'main', url: 'https://github.com/Repo-Testing-Account/dep-test.git'
+                script {
+                    docker.withRegistry('', "${DOCKER_HUB_CREDS}") {
+                        sh "docker build -t ${IMAGE_WITH_TAG} ."
+                        sh "docker push ${IMAGE_WITH_TAG}"
+                    }
+                }
             }
         }
 
-        stage('Deploy to Minikube') {
-            steps {
-                // Set the KUBECONFIG environment variable for the duration of this block
-                withEnv(['KUBECONFIG=' + env.KUBECONFIG_PATH]) {
-                    echo "Deploying ${env.DEPLOYMENT_NAME} to Minikube..."
-                    
-                    // Apply your Kubernetes manifests
-                    sh 'kubectl apply -f k8s/deployment.yaml'
-                    
-                    // Verify deployment rollout using the variable
-                    sh "kubectl rollout status deployment/${env.DEPLOYMENT_NAME}"
+        stage('Deploy') {
+    steps {
+        withKubeConfig([credentialsId: 'minikube-config']) {
+            script {
+                // Debug: list contents of k8s directory
+                sh 'ls -la k8s/'
+                
+                def templatePath = 'k8s/deployment.template.yaml'
+                
+                if (fileExists(templatePath)) {
+                    sh "sed 's|IMAGE_PLACEHOLDER|${IMAGE_WITH_TAG}|g' ${templatePath} > k8s/deployment.yaml"
+                    sh "kubectl apply -f k8s/deployment.yaml"
+                    sh "kubectl rollout restart deployment/my-app"
+                    sh "kubectl rollout status deployment/my-app"
+                } else {
+                    error "Could not find ${templatePath}. Please check your GitHub repository."
                 }
             }
         }
     }
-
+}
+    }
+    
     post {
-        success {
-            echo "Deployment of ${env.DEPLOYMENT_NAME} successful!"
-        }
-        failure {
-            echo "Deployment failed."
+        always {
+            sh "rm -f k8s/deployment.yaml"
         }
     }
 }
