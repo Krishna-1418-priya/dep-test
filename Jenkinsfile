@@ -12,7 +12,7 @@ pipeline {
     stages {
         stage('Verify Files') {
     steps {
-        git branch: 'main', url: 'https://github.com/Repo-Testing-Account/dep-test.git'
+        git branch: 'main', url: 'https://github.com/Krishna-1418-priya/dep-test.git'
     }
 }
         stage('Build & Push') {
