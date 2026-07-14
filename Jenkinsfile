@@ -16,15 +16,22 @@ pipeline {
     }
 }
         stage('Build & Push') {
-            steps {
-                script {
-                    docker.withRegistry('', "${DOCKER_HUB_CREDS}") {
-                        sh "docker build -t ${IMAGE_WITH_TAG} ."
-                        sh "docker push ${IMAGE_WITH_TAG}"
-                    }
-                }
-            }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-credentials-id',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+
+            sh '''
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker build -t ${IMAGE_WITH_TAG} .
+            docker push ${IMAGE_WITH_TAG}
+            docker logout
+            '''
         }
+    }
+}
 
         stage('Deploy') {
     steps {
